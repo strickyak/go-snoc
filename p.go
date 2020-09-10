@@ -57,20 +57,25 @@ func VecToList(a []X) X {
 	return z
 }
 
-func ParseExprs(toks []Tok) ([]Tok, []X) {
+func ParseExprs(toks []Tok) (string, []Tok, []X) {
 	log.Printf("<<<<<<<<<<<<<<< %v", toks)
 	var z []X
+	last := ""
 LOOP:
 	for len(toks) > 0 {
 		log.Printf("XXXXXXXXXXXXXXX %v", toks)
 		t, rest := toks[0], toks[1:]
 		switch t.Text {
 		case "(":
-			rest2, vec := ParseExprs(rest)
+			last2, rest2, vec := ParseExprs(rest)
+			if last2 != ")" {
+				log.Panicf("Parens not terminated: last=%q rest=%v", last2, rest2)
+			}
 			toks = rest2
 			z = append(z, VecToList(vec))
 		case ")":
 			toks = rest
+			last = ")"
 			break LOOP
 		default:
 			f, err := strconv.ParseFloat(t.Text, 64)
@@ -82,13 +87,16 @@ LOOP:
 			toks = rest
 		}
 	}
-	log.Printf(">>>>>>>>>>>>>>> %v ::: %v", z, toks)
-	return toks, z
+	log.Printf(">>>>>>>>>>>>>>> %v ::: %v ::: %v", z, last, toks)
+	return last, toks, z
 }
 
 func ParseText(text, filename string) []X {
 	toks := Lex(text, filename)
-	rest, xs := ParseExprs(toks)
+	last, rest, xs := ParseExprs(toks)
+	if last != "" {
+		log.Panicf("Did not expect nonempty last: last=%q rest=%v", last, rest)
+	}
 	if len(rest) > 0 {
 		log.Panicf("Unused tokens from %q: %v", filename, rest)
 	}

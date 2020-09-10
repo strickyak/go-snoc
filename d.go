@@ -2,6 +2,7 @@ package snoc
 
 import (
 	"log"
+	"runtime/debug"
 	"strings"
 
 	. "github.com/strickyak/yak"
@@ -41,6 +42,7 @@ func (o XBase) Get(key X) X { return o.Panic(o, "cannot Get key %q", key) }
 
 func (o XBase) String() string { return "XBase" }
 func (o XBase) Panic(rcvr X, format string, args ...interface{}) X {
+	debug.PrintStack()
 	var v []interface{}
 	v = append(v, rcvr)
 	v = append(v, rcvr)
@@ -62,6 +64,7 @@ func (o *Sym) Get(key X) X { return o.Panic(o, "cannot Get key %q", key) }
 
 func (o *Sym) String() string { return o.S }
 func (o *Sym) Panic(rcvr X, format string, args ...interface{}) X {
+	debug.PrintStack()
 	var v []interface{}
 	v = append(v, rcvr)
 	v = append(v, rcvr)

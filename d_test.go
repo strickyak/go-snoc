@@ -1,9 +1,9 @@
 package snoc
 
 import (
-	. "github.com/strickyak/yak"
-	"log"
 	"testing"
+
+	. "github.com/strickyak/yak"
 )
 
 func defun(env Env, definition string) Env {
@@ -15,14 +15,14 @@ func defun(env Env, definition string) Env {
 	return env.Snoc(lambda).Snoc(name)
 }
 
-func Test2(t *testing.T) {
+func TestParseText(t *testing.T) {
 	env := defun(NewEnv(), "add (x y) (+ x y)")
-	log.Printf("ENV: %v", env)
+	L("ENV: %v", env)
 
 	xs := ParseText("10 ( + 10 90) (add 100 900)", "Test1")
 	for i, x := range xs {
-		log.Printf("X[%d]: (%T)%v", i, x, x)
+		L("X[%d]: (%T)%v", i, x, x)
 		z := x.Eval(env)
-		log.Printf("Z[%d]: (%T)%v", i, z, z)
+		L("Z[%d]: (%T)%v", i, z, z)
 	}
 }

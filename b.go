@@ -1,12 +1,9 @@
-// b.go: buildtins
+// b.go: builtins
 
 package snoc
 
 import (
-	"bufio"
-	"io"
 	"math"
-	"strings"
 
 	. "github.com/strickyak/yak"
 )
@@ -67,6 +64,15 @@ var BuiltinFloatingBinaryOps = map[string]func(float64, float64) float64{
 	"mod": func(a, b float64) float64 { return math.Mod(a, b) },
 }
 
+var BuiltinFloatingRelOps = map[string]func(float64, float64) bool{
+	"<":  func(a, b float64) bool { return a < b },
+	"<=": func(a, b float64) bool { return a <= b },
+	"==": func(a, b float64) bool { return a == b },
+	"!=": func(a, b float64) bool { return a != b },
+	">":  func(a, b float64) bool { return a > b },
+	">=": func(a, b float64) bool { return a >= b },
+}
+
 var BuiltinPrims = map[string]func([]X, Env) X{
 	"sum": func(args []X, env Env) X {
 		sum := 0.0
@@ -92,8 +98,23 @@ func init() {
 		Globals[k] = &Prim{Name: k, F: fn}
 	}
 	for k, fn := range BuiltinFloatingBinaryOps {
-		Globals[k] = &Prim{Name: k, F: func(args []X, env Env) X {
-			return &Float{F: fn(args[0].(*Float).F, args[1].(*Float).F)}
+		k_, fn_ := k, fn // Capture an inside-loop copy.
+		Globals[k_] = &Prim{Name: k_, F: func(args []X, env Env) X {
+			MustEq(len(args), 2)
+			return &Float{F: fn_(args[0].(*Float).F, args[1].(*Float).F)}
+		}}
+	}
+	for k, fn := range BuiltinFloatingRelOps {
+		k_, fn_ := k, fn // Capture an inside-loop copy.
+		Globals[k_] = &Prim{Name: k_, F: func(args []X, env Env) X {
+			MustEq(len(args), 2)
+			a := args[0].(*Float).F
+			b := args[1].(*Float).F
+			L("name=%q a=%g b=%g fn=>%v", k_, a, b, fn_(a, b))
+			if fn_(a, b) {
+				return TRUE
+			}
+			return NIL
 		}}
 	}
 	Globals["nil"] = NIL
@@ -105,62 +126,4 @@ func init() {
 
 func NewEnv() Env {
 	return Env{NIL}
-}
-
-func TryReplParse(s string) (xs []X, ok bool) {
-	defer func() {
-		r := recover()
-		if r != nil {
-			ok = false
-		}
-	}()
-	ok = true
-	xs = ParseText(s, "*repl*")
-	return
-}
-
-func TryReplEval(env Env, xs []X) (result X, newenv Env, err interface{}) {
-	defer func() {
-		err = recover()
-	}()
-	result = NIL
-	for _, x := range xs {
-		if p, ok := x.(*Pair); ok {
-			if p.H == DEF {
-				vec := ListToVec(p.T)
-				MustEq(len(vec), 2)
-				env = env.Snoc(vec[1]).Snoc(vec[0])
-			} else if p.H == DEFUN {
-				vec := ListToVec(p.T)
-				MustEq(len(vec), 3)
-				defun := NIL.Snoc(vec[2]).Snoc(vec[1]).Snoc(FN)
-				env = env.Snoc(defun).Snoc(vec[0])
-			}
-		}
-		result = x.Eval(env)
-	}
-	newenv = env
-	return
-}
-
-func Repl(env Env, r io.Reader) Env {
-	sc := bufio.NewScanner(r)
-	var b strings.Builder
-	for sc.Scan() {
-		b.WriteString(sc.Text())
-		s := b.String()
-		xs, ok := TryReplParse(s)
-		if !ok {
-			continue
-		}
-
-		result, newenv, err := TryReplEval(env, xs)
-		if err != nil {
-			L("ERROR: %v", err)
-		} else {
-			L("====> %v", result)
-			env = newenv
-		}
-	}
-	return env
 }
