@@ -1,11 +1,15 @@
 package snoc
 
-type X interface {
-	Eval(env X) X
-	Apply(args []X, env X) X // args are unevaluated.
+type Env struct {
+	Chain X
+}
 
-	Null() bool
-	Atom() bool
+type X interface {
+	Eval(env Env) X
+	Apply(args []X, env Env) X // args are unevaluated.
+
+	NullP() bool
+	AtomP() bool
 	Head() X
 	Tail() X
 	Eq(a X) bool
@@ -45,11 +49,11 @@ type Pair struct {
 type Prim struct {
 	XBase
 	Name string
-	F    func(args []X, env X) X // args are evaluated.
+	F    func(args []X, env Env) X // args are evaluated.
 }
 
 type Special struct {
 	XBase
 	Name string
-	F    func(args []X, env X) X // args are unevaluated.
+	F    func(args []X, env Env) X // args are unevaluated.
 }

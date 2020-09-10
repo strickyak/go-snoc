@@ -1,17 +1,20 @@
 package snoc
 
 import (
-	"fmt"
-	"github.com/strickyak/yak"
 	"log"
 	"strings"
+
+	. "github.com/strickyak/yak"
 )
 
-var F = fmt.Sprintf
+var Globals = make(map[string]X)
 
 var InternTable = make(map[string]X)
 var NIL = &Null{Sym{S: "nil"}}
 var FN = Intern("fn")
+var TRUE = Intern("true")
+var DEF = Intern("def")
+var DEFUN = Intern("defun")
 
 func init() {
 	InternTable["nil"] = NIL
@@ -28,8 +31,8 @@ func Intern(s string) X {
 
 // XBase
 
-func (o XBase) Null() bool  { return false }
-func (o XBase) Atom() bool  { return true }
+func (o XBase) NullP() bool { return false }
+func (o XBase) AtomP() bool { return true }
 func (o XBase) Head() X     { return o.Panic(o, "cannot Head") }
 func (o XBase) Tail() X     { return o.Panic(o, "cannot Tail") }
 func (o XBase) Eq(a X) bool { return o == a }
@@ -46,20 +49,15 @@ func (o XBase) Panic(rcvr X, format string, args ...interface{}) X {
 	return NIL
 }
 
-func (o XBase) Eval(env X) X            { return o }
-func (o XBase) Apply(args []X, env X) X { return o.Panic(o, "cannot Apply") }
+func (o XBase) Eval(env Env) X            { return o }
+func (o XBase) Apply(args []X, env Env) X { return o.Panic(o, "cannot Apply") }
 
 // *Sym
 
-func (o *Sym) Null() bool { return o.S == "nil" }
-func (o *Sym) Head() X    { return o.Panic(o, "cannot Head") }
-func (o *Sym) Tail() X    { return o.Panic(o, "cannot Tail") }
-func (o *Sym) Snoc(a X) X {
-	if o.Null() {
-		return &Pair{H: a, T: o}
-	}
-	return o.Panic(o, "cannot Snoc")
-}
+func (o *Sym) NullP() bool { return o.S == "nil" }
+func (o *Sym) Head() X     { return o.Panic(o, "cannot Head") }
+func (o *Sym) Tail() X     { return o.Panic(o, "cannot Tail") }
+func (o *Sym) Snoc(a X) X  { return o.Panic(o, "cannot Snoc") }
 func (o *Sym) Get(key X) X { return o.Panic(o, "cannot Get key %q", key) }
 
 func (o *Sym) String() string { return o.S }
@@ -68,42 +66,57 @@ func (o *Sym) Panic(rcvr X, format string, args ...interface{}) X {
 	v = append(v, rcvr)
 	v = append(v, rcvr)
 	v = append(v, args...)
-	log.Panic(o, "Panic on %T %s: "+format, v)
+	log.Panicf("Panic on %T %s: "+format, v...)
 	return NIL
 }
 
-func (o *Sym) Eval(env X) X {
-	if o.S == "nil" || o.S == "fn" {
+func (o *Sym) Eval(env Env) X {
+	if o == FN {
 		return o
 	}
-	return env.Get(o)
+	z := env.Get(o)
+	if z == nil {
+		k := o.S
+		g, ok := Globals[k]
+		if !ok {
+			log.Panicf("No such variable: %q", k)
+		}
+		z = g
+	}
+	return z
 }
 
-func (o *Sym) Apply(args []X, env X) X { return o.Panic(o, "cannot Apply") }
+func (o *Sym) Apply(args []X, env Env) X { return o.Panic(o, "cannot Apply") }
 
 // *Null
 
-func (o *Null) Null() bool     { return true }
+func (o *Null) NullP() bool    { return true }
 func (o *Null) String() string { return o.S }
+func (o *Null) Get(key X) X    { return nil }
+func (o *Null) Eval(env Env) X { return o }
+func (o *Null) Snoc(a X) X     { return &Pair{H: a, T: NIL} }
 
 // *Pair
 
-func (o *Pair) Null() bool { return false }
-func (o *Pair) Atom() bool { return false }
-func (o *Pair) Head() X    { return o.H }
-func (o *Pair) Tail() X    { return o.T }
+func (o *Pair) NullP() bool { return false }
+func (o *Pair) AtomP() bool { return false }
+func (o *Pair) Head() X     { return o.H }
+func (o *Pair) Tail() X     { return o.T }
 
-//func (o *Pair) Eq(a X) bool { return o == a }
 func (o *Pair) Snoc(a X) X {
 	return &Pair{H: a, T: o}
 }
 func (o *Pair) Get(key X) X {
+	L("ON %v GET %T %v <<<", o, key, key)
 	for p := X(o); p != NIL; p = p.Tail().Tail() {
+		L("ON %v GET %T %v === %T %v", o, key, key, p.Head(), p.Head())
 		if p.Head() == key {
+			L("ON %v GET %T %v >>> %T %v", o, key, key, p.Tail().Head(), p.Tail().Head())
 			return p.Tail().Head()
 		}
 	}
-	return o.Panic(o, "cannot Get key %v", key)
+	L("ON %v GET %T %v >>> NIL", o, key, key)
+	return nil
 }
 
 func (o *Pair) String() string {
@@ -126,16 +139,16 @@ func (o *Pair) String() string {
 	return bb.String()
 }
 
-func (o *Pair) Eval(env X) X {
+func (o *Pair) Eval(env Env) X {
 	f := o.H.Eval(env)
 	return f.Apply(ListToVec(o.T), env)
 }
 
-func (o *Pair) Apply(args []X, env X) X { // args are unevaluted.
+func (o *Pair) Apply(args []X, env Env) X { // args are unevaluted.
 	log.Printf("ApplyPair %q <<<<<< %v", o, args)
-	yak.MustEq(o.H, FN)
+	MustEq(o.H, FN)
 	vars := ListToVec(o.T.Head())
-	yak.MustEq(len(vars), len(args))
+	MustEq(len(vars), len(args))
 	vals := make([]X, len(vars))
 	for i, v := range args {
 		vals[i] = v.Eval(env)
@@ -153,7 +166,7 @@ func (o *Pair) Apply(args []X, env X) X { // args are unevaluted.
 
 // *Prim
 
-func (o *Prim) Apply(args []X, env X) X { // args are unevaluted.
+func (o *Prim) Apply(args []X, env Env) X { // args are unevaluted.
 	log.Printf("Prim %q <<<<<< %v", o.Name, args)
 	evalledArgs := make([]X, len(args))
 	for i, a := range args {
@@ -168,55 +181,34 @@ func (o *Prim) Apply(args []X, env X) X { // args are unevaluted.
 	return z
 }
 
-func (o *Prim) Eval(env X) X { return o }
+func (o *Prim) Eval(env Env) X { return o }
 func (o *Prim) String() string {
 	return F("Prim(%q)", o.Name)
 }
 
 // *Special
 
-func (o *Special) Apply(args []X, env X) X { // args are unevaluted.
+func (o *Special) Apply(args []X, env Env) X { // args are unevaluted.
 	log.Printf("Special %q <<< %v", o.Name, args)
 	z := o.F(args, env)
 	log.Printf("Special %q >>> (%T)%v", o.Name, z, z)
 	return z
 }
-func (o *Special) Eval(env X) X { return o }
+func (o *Special) Eval(env Env) X { return o }
 func (o *Special) String() string {
 	return F("Special(%q)", o.Name)
 }
 
 // *Str
 
-func (o *Str) Eval(env X) X { return o }
+func (o *Str) Eval(env Env) X { return o }
 func (o *Str) String() string {
 	return F("%q", o.S)
 }
 
 // *Float
 
-func (o *Float) Eval(env X) X { return o }
+func (o *Float) Eval(env Env) X { return o }
 func (o *Float) String() string {
 	return F("%g", o.F)
-}
-
-// New
-
-func NewEnv() X {
-	z := X(NIL)
-	prim := func(name string, f func(args []X, env X) X) {
-		z = z.Snoc(&Prim{Name: name, F: f}).Snoc(Intern(name))
-	}
-
-	prim("+", func(args []X, env X) X {
-		sum := 0.0
-		for _, a := range args {
-			sum += a.(*Float).F
-		}
-		return &Float{F: sum}
-	})
-
-	z = z.Snoc(ParseText(`(fn (a b) (+ a b))`, "add")[0]).Snoc(Intern("add"))
-
-	return z
 }
