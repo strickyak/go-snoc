@@ -16,6 +16,13 @@ type X interface {
 	Snoc(a X) X
 	Get(key X) X
 
+	// Errors if not the natural type:
+	Int() int
+	Float() float64
+	Str() string
+	Symb() string
+	Bool() bool // opposite of NullP()
+
 	String() string
 	Panic(rcvr X, fmt string, args ...interface{}) X
 }

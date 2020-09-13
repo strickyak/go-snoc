@@ -4,7 +4,9 @@ package snoc
 
 import (
 	"bufio"
+	"fmt"
 	"io"
+	"os"
 	//"strings"
 
 	. "github.com/strickyak/yak"
@@ -53,9 +55,9 @@ func Repl(env Env, r io.Reader) ([]X, Env) {
 	var results []X
 	buf := ""
 	for sc.Scan() {
-		L("TEXT: %q", sc.Text())
+		//L("TEXT: %q", sc.Text())
 		buf += sc.Text() + "\n"
-		L("TRY: %q", buf)
+		//L("TRY: %q", buf)
 		xs, ok := TryReplParse(buf)
 		if !ok {
 			continue
@@ -66,14 +68,15 @@ func Repl(env Env, r io.Reader) ([]X, Env) {
 		}
 
 		for i, x := range xs {
-			L("X[%d] <==== %v", i, x)
+			fmt.Fprintf(os.Stderr, "[%d]<---- %v\n", i, x)
 		}
 		result, newenv, err := TryReplEval(env, xs)
 		if err != nil {
-			L("ERROR: %v", err)
-			results = append(results, Intern("*ERROR*"))
+			fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+			errStr := fmt.Sprintf("%v", err)
+			results = append(results, NIL.Snoc(&Str{S: errStr}).Snoc(Intern("*ERROR*")))
 		} else {
-			L("====> %v", result)
+			fmt.Fprintf(os.Stderr, "---->   %v\n", result)
 			env = newenv
 			results = append(results, result)
 		}

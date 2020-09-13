@@ -40,6 +40,12 @@ func (o XBase) Eq(a X) bool { return o == a }
 func (o XBase) Snoc(a X) X  { return o.Panic(o, "cannot Snoc") }
 func (o XBase) Get(key X) X { return o.Panic(o, "cannot Get key %q", key) }
 
+func (o XBase) Int() int       { o.Panic(o, "cannot Int"); return 0 }
+func (o XBase) Float() float64 { o.Panic(o, "cannot Float"); return 0 }
+func (o XBase) Str() string    { o.Panic(o, "cannot Str"); return "" }
+func (o XBase) Symb() string   { o.Panic(o, "cannot Symb"); return "" }
+func (o XBase) Bool() bool     { return true }
+
 func (o XBase) String() string { return "XBase" }
 func (o XBase) Panic(rcvr X, format string, args ...interface{}) X {
 	debug.PrintStack()
@@ -94,6 +100,7 @@ func (o *Sym) Apply(args []X, env Env) X { return o.Panic(o, "cannot Apply") }
 // *Null
 
 func (o *Null) NullP() bool    { return true }
+func (o *Null) Bool() bool     { return false }
 func (o *Null) String() string { return o.S }
 func (o *Null) Get(key X) X    { return nil }
 func (o *Null) Eval(env Env) X { return o }
@@ -110,15 +117,15 @@ func (o *Pair) Snoc(a X) X {
 	return &Pair{H: a, T: o}
 }
 func (o *Pair) Get(key X) X {
-	L("ON %v GET %T %v <<<", o, key, key)
+	//L("ON %v GET %T %v <<<", o, key, key)
 	for p := X(o); p != NIL; p = p.Tail().Tail() {
-		L("ON %v GET %T %v === %T %v", o, key, key, p.Head(), p.Head())
+		//L("ON %v GET %T %v === %T %v", o, key, key, p.Head(), p.Head())
 		if p.Head() == key {
-			L("ON %v GET %T %v >>> %T %v", o, key, key, p.Tail().Head(), p.Tail().Head())
+			//L("ON %v GET %T %v >>> %T %v", o, key, key, p.Tail().Head(), p.Tail().Head())
 			return p.Tail().Head()
 		}
 	}
-	L("ON %v GET %T %v >>> NIL", o, key, key)
+	//L("ON %v GET %T %v >>> NIL", o, key, key)
 	return nil
 }
 
@@ -148,39 +155,39 @@ func (o *Pair) Eval(env Env) X {
 }
 
 func (o *Pair) Apply(args []X, env Env) X { // args are unevaluted.
-	log.Printf("ApplyPair %q <<<<<< %v", o, args)
-	MustEq(o.H, FN)
+	//log.Printf("ApplyPair %q <<<<<< %v", o, args)
+	MustEq(o.H, FN, args)
 	vars := ListToVec(o.T.Head())
-	MustEq(len(vars), len(args))
+	MustEq(len(vars), len(args), args)
 	vals := make([]X, len(vars))
 	for i, v := range args {
 		vals[i] = v.Eval(env)
 	}
 	e := env
 	for i, _ := range vars {
-		log.Printf("ApplyPair %v := %v", vars[i], vals[i])
+		//log.Printf("ApplyPair %v := %v", vars[i], vals[i])
 		e = e.Snoc(vals[i])
 		e = e.Snoc(vars[i])
 	}
 	z := o.T.Tail().Head().Eval(e)
-	log.Printf("ApplyPair %q >>> (%T)%v", o, z, z)
+	//log.Printf("ApplyPair %q >>> (%T)%v", o, z, z)
 	return z
 }
 
 // *Prim
 
 func (o *Prim) Apply(args []X, env Env) X { // args are unevaluted.
-	log.Printf("Prim %q <<<<<< %v", o.Name, args)
+	//log.Printf("Prim %q <<<<<< %v", o.Name, args)
 	evalledArgs := make([]X, len(args))
 	for i, a := range args {
 		evalledArgs[i] = a.Eval(env)
 	}
-	log.Printf("Prim %q <<< %v", o.Name, evalledArgs)
-	for i, ea := range evalledArgs {
-		log.Printf("Prim %q <<< [%d] (%T)%v", o.Name, i, ea, ea)
-	}
+	//log.Printf("Prim %q <<< %v", o.Name, evalledArgs)
+	//for i, ea := range evalledArgs {
+	//log.Printf("Prim %q <<< [%d] (%T)%v", o.Name, i, ea, ea)
+	//}
 	z := o.F(evalledArgs, env)
-	log.Printf("Prim %q >>> (%T)%v", o.Name, z, z)
+	//log.Printf("Prim %q >>> (%T)%v", o.Name, z, z)
 	return z
 }
 
@@ -192,9 +199,9 @@ func (o *Prim) String() string {
 // *Special
 
 func (o *Special) Apply(args []X, env Env) X { // args are unevaluted.
-	log.Printf("Special %q <<< %v", o.Name, args)
+	//log.Printf("Special %q <<< %v", o.Name, args)
 	z := o.F(args, env)
-	log.Printf("Special %q >>> (%T)%v", o.Name, z, z)
+	//log.Printf("Special %q >>> (%T)%v", o.Name, z, z)
 	return z
 }
 func (o *Special) Eval(env Env) X { return o }
@@ -214,4 +221,14 @@ func (o *Str) String() string {
 func (o *Float) Eval(env Env) X { return o }
 func (o *Float) String() string {
 	return F("%g", o.F)
+}
+
+// Env
+
+func (env Env) Snoc(x X) Env {
+	return Env{env.Chain.Snoc(x)}
+}
+
+func (env Env) Get(k X) X {
+	return env.Chain.Get(k)
 }

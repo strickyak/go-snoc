@@ -1,6 +1,7 @@
 package snoc
 
 import (
+	"fmt"
 	"github.com/strickyak/yak"
 	"io/ioutil"
 	"log"
@@ -26,7 +27,7 @@ func Lex(text, filename string) (z []Tok) {
 		log.Printf("Lex error at %v: %s", s.Position, msg)
 	}
 	for tok := s.Scan(); tok != scanner.EOF; tok = s.Scan() {
-		log.Printf("%s: %s\n", s.Position, s.TokenText())
+		//log.Printf("%s: %s\n", s.Position, s.TokenText())
 		z = append(z, Tok{s.Position, s.TokenText()})
 	}
 	if s.ErrorCount > 0 {
@@ -58,18 +59,18 @@ func VecToList(a []X) X {
 }
 
 func ParseExprs(toks []Tok) (string, []Tok, []X) {
-	log.Printf("<<<<<<<<<<<<<<< %v", toks)
+	//log.Printf("<<<<<<<<<<<<<<< %v", toks)
 	var z []X
 	last := ""
 LOOP:
 	for len(toks) > 0 {
-		log.Printf("XXXXXXXXXXXXXXX %v", toks)
+		//log.Printf("XXXXXXXXXXXXXXX %v", toks)
 		t, rest := toks[0], toks[1:]
 		switch t.Text {
 		case "(":
 			last2, rest2, vec := ParseExprs(rest)
 			if last2 != ")" {
-				log.Panicf("Parens not terminated: last=%q rest=%v", last2, rest2)
+				panic(fmt.Errorf("Parens not terminated: last=%q rest=%v", last2, rest2))
 			}
 			toks = rest2
 			z = append(z, VecToList(vec))
@@ -87,7 +88,7 @@ LOOP:
 			toks = rest
 		}
 	}
-	log.Printf(">>>>>>>>>>>>>>> %v ::: %v ::: %v", z, last, toks)
+	//log.Printf(">>>>>>>>>>>>>>> %v ::: %v ::: %v", z, last, toks)
 	return last, toks, z
 }
 

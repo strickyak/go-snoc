@@ -41,22 +41,80 @@ func TestSignum(t *testing.T) {
 	}
 }
 
-func TestTriangle(t *testing.T) {
-	r := strings.NewReader(`
-    (defun triangle (x) (
-      if (< x 1)
-         0
-         (+ x (triangle (- x 1)))
-    ))
-    (triangle 6)
-  `)
-	results, _ := Repl(NewEnv(), r)
-	for i, result := range results {
-		L("==> result[%d] = %v", i, result)
+func TestPrograms(t *testing.T) {
+	scenarios := []struct {
+		program string
+		want    string
+	}{
+		{`
+			(list (list 1 2 3) (list 4 5 6))
+		`, "((1 2 3) (4 5 6))"},
+
+		{`(let
+			    A (list 1 2 3)
+					B (list 4 5 6)
+					C (list A B)
+					(list A B C)
+			)
+		`, "((1 2 3) (4 5 6) ((1 2 3) (4 5 6)))"},
+
+		{`
+			(defun my-triangle (x) (
+				if (< x 1)
+					 0
+					 (+ x (my-triangle (- x 1)))
+			))
+			(my-triangle 6)
+		`, "21"},
+
+		{`
+			(defun my-length (x) (
+				if (null? x)
+					 0
+					 (+ 1 (my-length (tail x)))
+			))
+			(my-length (list 9 7 5 3 1))
+		`, "5"},
+
+		{`
+			(defun my-descending (n) (
+				if (<= n 0)
+					 (list)
+					 (cons n (my-descending (- n 1)))
+			))
+			(my-descending 7)
+		`, "(7 6 5 4 3 2 1)"},
+
+		{`
+			(defun my-descending (n) (
+				if (<= n 0)
+					 (list)
+					 (cons n (my-descending (- n 1)))
+			))
+			(defun my-sum (aList) (
+				if (null? aList)
+					 0
+					 (+ (head aList) (my-sum (tail aList)))
+			))
+			111 222 333
+			(my-sum (my-descending 100))
+		`, "5050"},
 	}
 
-	z := results[len(results)-1]
-	if z.(*Float) == nil || z.(*Float).F != 21 {
-		t.Errorf("Expected (triangle 6) to be 21, got %v", z)
+	for j, sc := range scenarios {
+		L("<== program[%d] = %v", j, sc.program)
+		r := strings.NewReader(sc.program)
+
+		results, _ := Repl(NewEnv(), r)
+		for i, result := range results {
+			L("==> result[%d.%d] = %v", j, i, result)
+		}
+
+		z := results[len(results)-1]
+		got := z.String()
+		if got != sc.want {
+			t.Errorf("Got %q, wanted %q, for program <<< %s >>>", got, sc.want, sc.program)
+		}
+
 	}
 }
