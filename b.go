@@ -9,6 +9,10 @@ import (
 )
 
 var BuiltinSpecials = map[string]func([]X, Env) X{
+	"quote": func(args []X, env Env) X {
+		MustLen(args, 1)
+		return args[0]
+	},
 	"and": func(args []X, env Env) X {
 		z := TRUE
 		for _, a := range args {

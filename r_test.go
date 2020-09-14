@@ -11,6 +11,22 @@ func TestPrograms(t *testing.T) {
 		want    string
 	}{
 		{`
+			(list (list 1 2 3) (list 4 5 6))
+		`, "((1 2 3) (4 5 6))"},
+
+		{`
+			(list (+ 3 4) (quote (+ 3 9)) (quote xyzzy))
+		`, "(7 (+ 3 9) xyzzy)"},
+
+		{`(let
+			    A (list 1 2 3)
+					B (list 4 5 6)
+					C (list A B)
+					(list A B C)
+			)
+		`, "((1 2 3) (4 5 6) ((1 2 3) (4 5 6)))"},
+
+		{`
     (def pos 1)
     (def neg -1)
     (def zero 0)
@@ -20,18 +36,6 @@ func TestPrograms(t *testing.T) {
       zero))
     (list (signum -888) (signum 0) (signum 123) )
     `, "(-1 0 1)"},
-
-		{`
-			(list (list 1 2 3) (list 4 5 6))
-		`, "((1 2 3) (4 5 6))"},
-
-		{`(let
-			    A (list 1 2 3)
-					B (list 4 5 6)
-					C (list A B)
-					(list A B C)
-			)
-		`, "((1 2 3) (4 5 6) ((1 2 3) (4 5 6)))"},
 
 		{`
 			(defun my-triangle (x) (
