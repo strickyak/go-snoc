@@ -3,12 +3,14 @@ package snoc
 import (
 	"strings"
 	"testing"
-
-	. "github.com/strickyak/yak"
 )
 
-func TestSignum(t *testing.T) {
-	r := strings.NewReader(`
+func TestPrograms(t *testing.T) {
+	scenarios := []struct {
+		program string
+		want    string
+	}{
+		{`
     (def pos 1)
     (def neg -1)
     (def zero 0)
@@ -16,36 +18,9 @@ func TestSignum(t *testing.T) {
       (< x 0) neg
       (> x 0) pos
       zero))
-    (signum -888)
-    (signum 0)
-    (signum 123)
-  `)
-	results, _ := Repl(NewEnv(), r)
-	for i, result := range results {
-		L("==> result[%d] = %v", i, result)
-	}
+    (list (signum -888) (signum 0) (signum 123) )
+    `, "(-1 0 1)"},
 
-	z := results[len(results)-3]
-	if z.(*Float) == nil || z.(*Float).F != -1 {
-		t.Errorf("Expected results[-3] to be -1, got %v", z)
-	}
-
-	z = results[len(results)-2]
-	if z.(*Float) == nil || z.(*Float).F != 0 {
-		t.Errorf("Expected results[-3] to be 0, got %v", z)
-	}
-
-	z = results[len(results)-1]
-	if z.(*Float) == nil || z.(*Float).F != 1 {
-		t.Errorf("Expected results[-3] to be 1, got %v", z)
-	}
-}
-
-func TestPrograms(t *testing.T) {
-	scenarios := []struct {
-		program string
-		want    string
-	}{
 		{`
 			(list (list 1 2 3) (list 4 5 6))
 		`, "((1 2 3) (4 5 6))"},
@@ -102,12 +77,12 @@ func TestPrograms(t *testing.T) {
 	}
 
 	for j, sc := range scenarios {
-		L("<== program[%d] = %v", j, sc.program)
+		t.Logf("<== program[%d] = %v", j, sc.program)
 		r := strings.NewReader(sc.program)
 
 		results, _ := Repl(NewEnv(), r)
 		for i, result := range results {
-			L("==> result[%d.%d] = %v", j, i, result)
+			t.Logf("==> result[%d.%d] = %v", j, i, result)
 		}
 
 		z := results[len(results)-1]
