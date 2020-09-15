@@ -2,7 +2,6 @@ package snoc
 
 import (
 	"fmt"
-	"github.com/strickyak/yak"
 	"io/ioutil"
 	"log"
 	"strconv"
@@ -36,35 +35,31 @@ func Lex(text, filename string) (z []Tok) {
 	return
 }
 
-func ListToVec(a X) []X {
-	var z []X
-	for {
-		p, ok := a.(*Pair)
-		if !ok {
-			yak.MustEq(a, NIL)
-			break
-		}
+func ListToVec(a Any) []Any {
+	b, ok := a.(*Pair)
+	if !ok {
+		Throw(a, "ListToVec expected *Pair")
+	}
+	var z []Any
+	for p := b; p != NIL; p = p.T {
 		z = append(z, p.H)
-		a = p.T
 	}
 	return z
 }
 
-func VecToList(a []X) X {
-	z := X(NIL)
+func VecToList(a []Any) Any {
+	z := NIL
 	for i := len(a) - 1; i >= 0; i-- {
 		z = &Pair{H: a[i], T: z}
 	}
 	return z
 }
 
-func ParseExprs(toks []Tok) (string, []Tok, []X) {
-	//log.Printf("<<<<<<<<<<<<<<< %v", toks)
-	var z []X
+func ParseExprs(toks []Tok) (string, []Tok, []Any) {
+	var z []Any
 	last := ""
 LOOP:
 	for len(toks) > 0 {
-		//log.Printf("XXXXXXXXXXXXXXX %v", toks)
 		t, rest := toks[0], toks[1:]
 		switch t.Text {
 		case "(":
@@ -81,18 +76,19 @@ LOOP:
 		default:
 			f, err := strconv.ParseFloat(t.Text, 64)
 			if err == nil {
-				z = append(z, &Float{F: f})
+				z = append(z, f)
+			} else if t.Text == "nil" {
+				z = append(z, NIL)
 			} else {
 				z = append(z, Intern(t.Text))
 			}
 			toks = rest
 		}
 	}
-	//log.Printf(">>>>>>>>>>>>>>> %v ::: %v ::: %v", z, last, toks)
 	return last, toks, z
 }
 
-func ParseText(text, filename string) []X {
+func ParseText(text, filename string) []Any {
 	toks := Lex(text, filename)
 	last, rest, xs := ParseExprs(toks)
 	if last != "" {
@@ -104,7 +100,7 @@ func ParseText(text, filename string) []X {
 	return xs
 }
 
-func ParseFile(filename string) []X {
+func ParseFile(filename string) []Any {
 	bb, err := ioutil.ReadFile(filename)
 	if err != nil {
 		log.Panicf("Cannot ReadFile %q: %v", filename, err)

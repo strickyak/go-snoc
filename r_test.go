@@ -76,8 +76,8 @@ func TestPrograms(t *testing.T) {
 					 (+ (head aList) (my-sum (tail aList)))
 			))
 			111 222 333
-			(my-sum (my-descending 100))
-		`, "5050"},
+			(my-sum (my-descending 7))
+		`, "28"},
 	}
 
 	for j, sc := range scenarios {
@@ -90,7 +90,7 @@ func TestPrograms(t *testing.T) {
 		}
 
 		z := results[len(results)-1]
-		got := z.String()
+		got := Stringify(z)
 		if got != sc.want {
 			t.Errorf("Got %q, wanted %q, for program <<< %s >>>", got, sc.want, sc.program)
 		}

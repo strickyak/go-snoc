@@ -1,27 +1,24 @@
 package snoc
 
 import (
+	"fmt"
 	"log"
 	"runtime/debug"
 	"strings"
-
-	. "github.com/strickyak/yak"
 )
 
-var Globals = make(map[string]X)
+var Globals = make(map[string]Any)
 
-var InternTable = make(map[string]X)
-var NIL = &Null{Sym{S: "nil"}}
+var InternTable = make(map[string]*Sym)
+
+// var NIL *Pair // with a nil value.
+var NIL = &Pair{}
 var FN = Intern("fn")
 var TRUE = Intern("true")
 var DEF = Intern("def")
 var DEFUN = Intern("defun")
 
-func init() {
-	InternTable["nil"] = NIL
-}
-
-func Intern(s string) X {
+func Intern(s string) *Sym {
 	if z, ok := InternTable[s]; ok {
 		return z
 	}
@@ -30,205 +27,252 @@ func Intern(s string) X {
 	return z
 }
 
-// XBase
+// Env
 
-func (o XBase) NullP() bool { return false }
-func (o XBase) AtomP() bool { return true }
-func (o XBase) Head() X     { return o.Panic(o, "cannot Head") }
-func (o XBase) Tail() X     { return o.Panic(o, "cannot Tail") }
-func (o XBase) Eq(a X) bool { return o == a }
-func (o XBase) Snoc(a X) X  { return o.Panic(o, "cannot Snoc") }
-func (o XBase) Get(key X) X { return o.Panic(o, "cannot Get key %q", key) }
-
-func (o XBase) Int() int       { o.Panic(o, "cannot Int"); return 0 }
-func (o XBase) Float() float64 { o.Panic(o, "cannot Float"); return 0 }
-func (o XBase) Str() string    { o.Panic(o, "cannot Str"); return "" }
-func (o XBase) Symb() string   { o.Panic(o, "cannot Symb"); return "" }
-func (o XBase) Bool() bool     { return true }
-
-func (o XBase) String() string { return "XBase" }
-func (o XBase) Panic(rcvr X, format string, args ...interface{}) X {
-	debug.PrintStack()
-	var v []interface{}
-	v = append(v, rcvr)
-	v = append(v, rcvr)
-	v = append(v, args...)
-	log.Panic("Panic on %T %q: "+format, v)
-	return NIL
+func (env Env) SnocSnoc(x Any, s *Sym) Env {
+	return Env{Snoc(Snoc(env.Chain, x), s)}
 }
 
-func (o XBase) Eval(env Env) X            { return o }
-func (o XBase) Apply(args []X, env Env) X { return o.Panic(o, "cannot Apply") }
-
-// *Sym
-
-func (o *Sym) NullP() bool { return o.S == "nil" }
-func (o *Sym) Head() X     { return o.Panic(o, "cannot Head") }
-func (o *Sym) Tail() X     { return o.Panic(o, "cannot Tail") }
-func (o *Sym) Snoc(a X) X  { return o.Panic(o, "cannot Snoc") }
-func (o *Sym) Get(key X) X { return o.Panic(o, "cannot Get key %q", key) }
-
-func (o *Sym) String() string { return o.S }
-func (o *Sym) Panic(rcvr X, format string, args ...interface{}) X {
-	debug.PrintStack()
-	var v []interface{}
-	v = append(v, rcvr)
-	v = append(v, rcvr)
-	v = append(v, args...)
-	log.Panicf("Panic on %T %s: "+format, v...)
-	return NIL
+func (env Env) Get(k *Sym) (Any, bool) {
+	//log.Printf("GET <<< %q", k.S)
+	z, ok := Get(env.Chain, k)
+	//log.Printf("GET >>> %#v, ok=%v", z, ok)
+	return z, ok
 }
 
-func (o *Sym) Eval(env Env) X {
-	if o == FN {
-		return o
-	}
-	z := env.Get(o)
-	if z == nil {
-		k := o.S
-		g, ok := Globals[k]
-		if !ok {
-			log.Panicf("No such variable: %q", k)
-		}
-		z = g
-	}
-	return z
-}
-
-func (o *Sym) Apply(args []X, env Env) X { return o.Panic(o, "cannot Apply") }
-
-// *Null
-
-func (o *Null) NullP() bool    { return true }
-func (o *Null) Bool() bool     { return false }
-func (o *Null) String() string { return o.S }
-func (o *Null) Get(key X) X    { return nil }
-func (o *Null) Eval(env Env) X { return o }
-func (o *Null) Snoc(a X) X     { return &Pair{H: a, T: NIL} }
-
-// *Pair
-
-func (o *Pair) NullP() bool { return false }
-func (o *Pair) AtomP() bool { return false }
-func (o *Pair) Head() X     { return o.H }
-func (o *Pair) Tail() X     { return o.T }
-
-func (o *Pair) Snoc(a X) X {
-	return &Pair{H: a, T: o}
-}
-func (o *Pair) Get(key X) X {
-	//L("ON %v GET %T %v <<<", o, key, key)
-	for p := X(o); p != NIL; p = p.Tail().Tail() {
-		//L("ON %v GET %T %v === %T %v", o, key, key, p.Head(), p.Head())
-		if p.Head() == key {
-			//L("ON %v GET %T %v >>> %T %v", o, key, key, p.Tail().Head(), p.Tail().Head())
-			return p.Tail().Head()
-		}
-	}
-	//L("ON %v GET %T %v >>> NIL", o, key, key)
-	return nil
+func (env Env) String() string {
+	return fmt.Sprintf("Env{%v}", Stringify(env.Chain))
 }
 
 func (o *Pair) String() string {
-	var bb strings.Builder
-	bb.WriteByte('(')
-	p := X(o)
-	for {
-		p2, ok := p.(*Pair)
-		if !ok {
-			log.Panicf("Pair::String: got %T, wanted Pair", p)
+	var buf strings.Builder
+	firstTime := true
+	buf.WriteString("(")
+	for p := o; p != NIL; p = p.T {
+		if !firstTime {
+			buf.WriteByte(' ')
 		}
-		bb.WriteString(p2.H.String())
-		if p2.T == NIL {
-			break
-		}
-		bb.WriteByte(' ')
-		p = p2.T
+		// fmt.Fprintf(&buf, "%T ", p.H)
+		buf.WriteString(Stringify(p.H))
+		firstTime = false
 	}
-	bb.WriteByte(')')
-	return bb.String()
+	buf.WriteString(")")
+	return buf.String()
 }
 
-func (o *Pair) Eval(env Env) X {
-	f := o.H.Eval(env)
-	return f.Apply(ListToVec(o.T), env)
+func (o *Sym) String() string {
+	return o.S
 }
 
-func (o *Pair) Apply(args []X, env Env) X { // args are unevaluted.
-	//log.Printf("ApplyPair %q <<<<<< %v", o, args)
-	MustEq(o.H, FN, args)
-	vars := ListToVec(o.T.Head())
-	MustEq(len(vars), len(args), args)
-	vals := make([]X, len(vars))
+// XBase
+
+func NullP(o Any) bool {
+	switch t := o.(type) {
+	case *Pair:
+		return t == NIL
+	}
+	return false
+}
+func AtomP(o Any) bool {
+	switch t := o.(type) {
+	case *Pair:
+		return t == NIL
+	}
+	return true
+}
+func Head(o Any) Any {
+	switch t := o.(type) {
+	case *Pair:
+		return t.H
+	}
+	return Throw(o, "cannot Head")
+}
+func Tail(o Any) Any {
+	switch t := o.(type) {
+	case *Pair:
+		return t.T
+	}
+	return Throw(o, "cannot Tail")
+}
+func Eq(o Any, a Any) bool {
+	switch t := o.(type) {
+	case *Sym:
+		if b, ok := a.(*Sym); ok {
+			return t == b
+		}
+	case string:
+		if b, ok := a.(string); ok {
+			return t == b
+		}
+	case int:
+		if b, ok := a.(int); ok {
+			return t == b
+		}
+	case float64:
+		if b, ok := a.(float64); ok {
+			return t == b
+		}
+	case *Pair:
+		if b, ok := a.(*Pair); ok {
+			return t == b
+		}
+	}
+	return false
+}
+func Snoc(o *Pair, a Any) *Pair {
+	return &Pair{H: a, T: o}
+}
+func Get(o *Pair, key *Sym) (Any, bool) {
+	for o != NIL {
+		if o.H.(*Sym) == key {
+			return o.T.H, true
+		}
+		o = o.T.T
+	}
+	return nil, false
+}
+func ToInt(o Any) int {
+	switch t := o.(type) {
+	case int:
+		return t
+	}
+	Throw(o, "cannot Int")
+	return 0
+}
+func ToFloat(o Any) float64 {
+	switch t := o.(type) {
+	case float64:
+		return t
+	}
+	Throw(o, "cannot Float")
+	return 0
+}
+func ToStr(o Any) string {
+	switch t := o.(type) {
+	case string:
+		return t
+	}
+	Throw(o, "cannot Str")
+	return ""
+}
+func Bool(o Any) bool {
+	switch t := o.(type) {
+	case *Pair:
+		return t != NIL
+	}
+	return true
+}
+
+func Stringify(o Any) string {
+	switch t := o.(type) {
+	case *Pair:
+		return t.String()
+	case *Sym:
+		return t.String()
+	}
+	return fmt.Sprintf("%v", o)
+}
+
+func Throw(o Any, format string, args ...interface{}) Any {
+	debug.PrintStack()
+	var v []interface{}
+	v = append(v, o)
+	v = append(v, o)
+	v = append(v, args...)
+	log.Panicf("Exception on (%T)%v: "+format, v...)
+	return NIL
+}
+
+func Eval(o Any, env Env) Any {
+	//log.Printf("EVAL <<< %v ; %v", o, env)
+	z := o
+	switch t := o.(type) {
+	case nil:
+		z = o
+	case *Sym:
+		z2, zok := env.Get(t)
+		if zok {
+			z = z2
+		} else {
+			g, gok := Globals[t.S]
+			// log.Printf("Globals %q --> (%T) %v, ok=%v", t.S, g, g, gok)
+			if !gok {
+				Throw(o, "cannot Eval")
+			}
+			z = g
+		}
+	case *Pair:
+		if o == NIL {
+			z = NIL
+		} else {
+			z = Apply(Eval(t.H, env), ListToVec(t.T), env)
+		}
+	}
+	//log.Printf("EVAL >>> %v", z)
+	return z
+}
+func Apply(o Any, args []Any, env Env) Any {
+	//log.Printf("APPLY <<< %v << %v ; %v", o, args, env)
+	var z Any
+	switch t := o.(type) {
+	case nil:
+		z = Throw(t, "cannot Apply list where first is nil")
+	case *Sym:
+		z = Throw(t, "cannot Apply list where first is *Sym")
+	case *Pair:
+		z = ApplyPair(t, args, env)
+	case *Prim:
+		z = ApplyPrim(t, args, env)
+	case *Special:
+		z = ApplySpecial(t, args, env)
+	default:
+		z = Throw(o, "cannot Apply")
+	}
+	//log.Printf("APPLY >>> %v", z)
+	return z
+}
+
+func ApplyPair(o *Pair, args []Any, env Env) Any {
+	if o == NIL {
+		Throw(o, "cannot Apply if list is nil")
+	}
+
+	if !Eq(o.H, FN) {
+		Throw(o, "cannot Apply if first is not FN")
+	}
+
+	vars := ListToVec(o.T.H)
+	if len(vars) != len(args) {
+		Throw(o, "apply: got %d args but wanted %d", len(args), len(vars))
+	}
+
+	vals := make([]Any, len(vars))
 	for i, v := range args {
-		vals[i] = v.Eval(env)
+		vals[i] = Eval(v, env)
 	}
-	e := env
 	for i, _ := range vars {
-		//log.Printf("ApplyPair %v := %v", vars[i], vals[i])
-		e = e.Snoc(vals[i])
-		e = e.Snoc(vars[i])
+		env = env.SnocSnoc(vals[i], vars[i].(*Sym))
 	}
-	z := o.T.Tail().Head().Eval(e)
-	//log.Printf("ApplyPair %q >>> (%T)%v", o, z, z)
-	return z
+	return Eval(o.T.T.H, env)
 }
 
-// *Prim
-
-func (o *Prim) Apply(args []X, env Env) X { // args are unevaluted.
-	//log.Printf("Prim %q <<<<<< %v", o.Name, args)
-	evalledArgs := make([]X, len(args))
+func ApplyPrim(o *Prim, args []Any, env Env) Any { // args are unevaluted.
+	evalledArgs := make([]Any, len(args))
 	for i, a := range args {
-		evalledArgs[i] = a.Eval(env)
+		evalledArgs[i] = Eval(a, env)
 	}
-	//log.Printf("Prim %q <<< %v", o.Name, evalledArgs)
-	//for i, ea := range evalledArgs {
-	//log.Printf("Prim %q <<< [%d] (%T)%v", o.Name, i, ea, ea)
-	//}
-	z := o.F(evalledArgs, env)
-	//log.Printf("Prim %q >>> (%T)%v", o.Name, z, z)
-	return z
+	return o.F(evalledArgs, env)
 }
 
-func (o *Prim) Eval(env Env) X { return o }
 func (o *Prim) String() string {
-	return F("Prim(%q)", o.Name)
+	return fmt.Sprintf("Prim(%q)", o.Name)
 }
 
-// *Special
-
-func (o *Special) Apply(args []X, env Env) X { // args are unevaluted.
-	//log.Printf("Special %q <<< %v", o.Name, args)
+func ApplySpecial(o *Special, args []Any, env Env) Any { // args are unevaluted.
 	z := o.F(args, env)
-	//log.Printf("Special %q >>> (%T)%v", o.Name, z, z)
 	return z
 }
-func (o *Special) Eval(env Env) X { return o }
+
 func (o *Special) String() string {
-	return F("Special(%q)", o.Name)
-}
-
-// *Str
-
-func (o *Str) Eval(env Env) X { return o }
-func (o *Str) String() string {
-	return F("%q", o.S)
-}
-
-// *Float
-
-func (o *Float) Eval(env Env) X { return o }
-func (o *Float) String() string {
-	return F("%g", o.F)
-}
-
-// Env
-
-func (env Env) Snoc(x X) Env {
-	return Env{env.Chain.Snoc(x)}
-}
-
-func (env Env) Get(k X) X {
-	return env.Chain.Get(k)
+	return fmt.Sprintf("Special(%q)", o.Name)
 }

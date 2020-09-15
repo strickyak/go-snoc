@@ -8,67 +8,67 @@ import (
 	. "github.com/strickyak/yak"
 )
 
-var BuiltinSpecials = map[string]func([]X, Env) X{
-	"quote": func(args []X, env Env) X {
+var BuiltinSpecials = map[string]func([]Any, Env) Any{
+	"quote": func(args []Any, env Env) Any {
 		MustLen(args, 1)
 		return args[0]
 	},
-	"and": func(args []X, env Env) X {
-		z := TRUE
+	"and": func(args []Any, env Env) Any {
+		z := Any(TRUE)
 		for _, a := range args {
-			x := a.Eval(env)
-			if x.NullP() {
+			x := Eval(a, env)
+			if NullP(x) {
 				return NIL
 			}
 			z = x
 		}
 		return z
 	},
-	"or": func(args []X, env Env) X {
+	"or": func(args []Any, env Env) Any {
 		for _, a := range args {
-			x := a.Eval(env)
-			if x.Bool() {
+			x := Eval(a, env)
+			if Bool(x) {
 				return x
 			}
 		}
 		return NIL
 	},
-	"all": func(args []X, env Env) X {
+	"all": func(args []Any, env Env) Any {
 		for _, a := range args {
-			if a.Eval(env).NullP() {
+			if NullP(Eval(a, env)) {
 				return NIL
 			}
 		}
 		return TRUE
 	},
-	"any": func(args []X, env Env) X {
+	"any": func(args []Any, env Env) Any {
 		for _, a := range args {
-			if a.Eval(env).Bool() {
+			if Bool(Eval(a, env)) {
 				return TRUE
 			}
 		}
 		return NIL
 	},
-	"if": func(args []X, env Env) X {
+	"if": func(args []Any, env Env) Any {
 		for len(args) >= 2 {
-			pred := args[0].Eval(env)
-			if pred.Bool() {
-				return args[1].Eval(env)
+			pred := Eval(args[0], env)
+			if Bool(pred) {
+				return Eval(args[1], env)
 			}
 			args = args[2:]
 		}
 		MustEq(len(args), 1)
-		return args[0].Eval(env)
+		return Eval(args[0], env)
 	},
-	"let": func(args []X, env Env) X {
+	"let": func(args []Any, env Env) Any {
 		for len(args) >= 2 {
 			sym, ok := args[0].(*Sym)
 			Must(ok)
-			env = env.Snoc(args[1].Eval(env)).Snoc(sym)
+			env = env.SnocSnoc(Eval(args[1], env), sym)
 			args = args[2:]
 		}
 		MustEq(len(args), 1)
-		return args[0].Eval(env)
+		return Eval(args[0], env)
 	},
 }
 
@@ -89,7 +89,7 @@ var BuiltinFloatingRelOps = map[string]func(float64, float64) bool{
 	">=": func(a, b float64) bool { return a >= b },
 }
 
-func TrueNil(b bool) X {
+func TrueNil(b bool) Any {
 	if b {
 		return TRUE
 	} else {
@@ -97,75 +97,83 @@ func TrueNil(b bool) X {
 	}
 }
 
-var BuiltinPrims = map[string]func([]X, Env) X{
-	"list": func(args []X, env Env) X {
-		z := X(NIL)
+var BuiltinPrims = map[string]func([]Any, Env) Any{
+	"list": func(args []Any, env Env) Any {
+		z := NIL
 		for i := len(args) - 1; i >= 0; i-- {
-			z = z.Snoc(args[i])
+			z = Snoc(z, args[i])
 		}
 		return z
 	},
-	"null?": func(args []X, env Env) X {
+	"null?": func(args []Any, env Env) Any {
 		MustLen(args, 1)
-		return TrueNil(args[0].NullP())
+		return TrueNil(NullP(args[0]))
 	},
-	"atom?": func(args []X, env Env) X {
+	"atom?": func(args []Any, env Env) Any {
 		MustLen(args, 1)
-		return TrueNil(args[0].AtomP())
+		return TrueNil(AtomP(args[0]))
 	},
-	"eq": func(args []X, env Env) X {
+	"eq": func(args []Any, env Env) Any {
 		MustLen(args, 2)
-		return TrueNil(args[0].Eq(args[1]))
+		return TrueNil(Eq(args[0], args[1]))
 	},
-	"head": func(args []X, env Env) X {
+	"head": func(args []Any, env Env) Any {
 		MustLen(args, 1)
-		return args[0].Head()
+		return Head(args[0])
 	},
-	"tail": func(args []X, env Env) X {
+	"tail": func(args []Any, env Env) Any {
 		MustLen(args, 1)
-		return args[0].Tail()
+		return Tail(args[0])
 	},
-	"1st": func(args []X, env Env) X {
+	"1st": func(args []Any, env Env) Any {
 		MustLen(args, 1)
-		return args[0].Head()
+		return Head(args[0])
 	},
-	"2nd": func(args []X, env Env) X {
+	"2nd": func(args []Any, env Env) Any {
 		MustLen(args, 1)
-		return args[0].Tail().Head()
+		return Head(Tail(args[0]))
 	},
-	"3rd": func(args []X, env Env) X {
+	"3rd": func(args []Any, env Env) Any {
 		MustLen(args, 1)
-		return args[0].Tail().Tail().Head()
+		return Head(Head(Tail(args[0])))
 	},
-	"4th": func(args []X, env Env) X {
+	"4th": func(args []Any, env Env) Any {
 		MustLen(args, 1)
-		return args[0].Tail().Tail().Tail().Head()
+		return Head(Head(Tail(Tail(args[0]))))
 	},
-	"5th": func(args []X, env Env) X {
+	"5th": func(args []Any, env Env) Any {
 		MustLen(args, 1)
-		return args[0].Tail().Tail().Tail().Tail().Head()
+		return Head(Head(Tail(Tail(Tail(args[0])))))
 	},
-	"snoc": func(args []X, env Env) X {
+	"snoc": func(args []Any, env Env) Any {
 		MustLen(args, 2)
-		return args[0].Snoc(args[1])
+		p, ok := args[0].(*Pair)
+		if !ok {
+			Throw(args[0], "cannot Snoc")
+		}
+		return Snoc(p, args[1])
 	},
-	"cons": func(args []X, env Env) X {
+	"cons": func(args []Any, env Env) Any {
 		MustLen(args, 2)
-		return args[1].Snoc(args[0])
+		p, ok := args[1].(*Pair)
+		if !ok {
+			Throw(args[1], "cannot Cons")
+		}
+		return Snoc(p, args[0])
 	},
-	"sum": func(args []X, env Env) X {
+	"sum": func(args []Any, env Env) Any {
 		sum := 0.0
 		for _, a := range args {
-			sum += a.(*Float).F
+			sum += ToFloat(a)
 		}
-		return &Float{F: sum}
+		return sum
 	},
-	"product": func(args []X, env Env) X {
+	"product": func(args []Any, env Env) Any {
 		product := 1.0
 		for _, a := range args {
-			product *= a.(*Float).F
+			product *= ToFloat(a)
 		}
-		return &Float{F: product}
+		return product
 	},
 }
 
@@ -178,18 +186,17 @@ func init() {
 	}
 	for k, fn := range BuiltinFloatingBinaryOps {
 		k_, fn_ := k, fn // Capture an inside-loop copy.
-		Globals[k_] = &Prim{Name: k_, F: func(args []X, env Env) X {
+		Globals[k_] = &Prim{Name: k_, F: func(args []Any, env Env) Any {
 			MustEq(len(args), 2)
-			return &Float{F: fn_(args[0].(*Float).F, args[1].(*Float).F)}
+			return fn_(args[0].(float64), args[1].(float64))
 		}}
 	}
 	for k, fn := range BuiltinFloatingRelOps {
 		k_, fn_ := k, fn // Capture an inside-loop copy.
-		Globals[k_] = &Prim{Name: k_, F: func(args []X, env Env) X {
+		Globals[k_] = &Prim{Name: k_, F: func(args []Any, env Env) Any {
 			MustEq(len(args), 2)
-			a := args[0].(*Float).F
-			b := args[1].(*Float).F
-			//L("name=%q a=%g b=%g fn=>%v", k_, a, b, fn_(a, b))
+			a := args[0].(float64)
+			b := args[1].(float64)
 			if fn_(a, b) {
 				return TRUE
 			}

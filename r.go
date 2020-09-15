@@ -12,7 +12,7 @@ import (
 	. "github.com/strickyak/yak"
 )
 
-func TryReplParse(s string) (xs []X, ok bool) {
+func TryReplParse(s string) (xs []Any, ok bool) {
 	defer func() {
 		r := recover()
 		if r != nil {
@@ -24,7 +24,7 @@ func TryReplParse(s string) (xs []X, ok bool) {
 	return
 }
 
-func TryReplEval(env Env, xs []X) (result X, newenv Env, err interface{}) {
+func TryReplEval(env Env, xs []Any) (result Any, newenv Env, err interface{}) {
 	defer func() {
 		err = recover()
 	}()
@@ -34,25 +34,33 @@ func TryReplEval(env Env, xs []X) (result X, newenv Env, err interface{}) {
 			if p.H == DEF {
 				vec := ListToVec(p.T)
 				MustEq(len(vec), 2)
-				result, env = NIL, env.Snoc(vec[1]).Snoc(vec[0])
+				sym, ok := vec[0].(*Sym)
+				if !ok {
+					Throw(vec[0], "DEF needs symbol at first")
+				}
+				result, env = NIL, env.SnocSnoc(vec[1], sym)
 				continue
 			} else if p.H == DEFUN {
 				vec := ListToVec(p.T)
 				MustEq(len(vec), 3)
-				defun := NIL.Snoc(vec[2]).Snoc(vec[1]).Snoc(FN)
-				result, env = NIL, env.Snoc(defun).Snoc(vec[0])
+				defun := Snoc(Snoc(Snoc(NIL, vec[2]), vec[1]), FN)
+				sym, ok := vec[0].(*Sym)
+				if !ok {
+					Throw(vec[0], "DEFUN needs symbol at first")
+				}
+				result, env = NIL, env.SnocSnoc(defun, sym)
 				continue
 			}
 		}
-		result = x.Eval(env)
+		result = Eval(x, env)
 	}
 	newenv = env
 	return
 }
 
-func Repl(env Env, r io.Reader) ([]X, Env) {
+func Repl(env Env, r io.Reader) ([]Any, Env) {
 	sc := bufio.NewScanner(r)
-	var results []X
+	var results []Any
 	buf := ""
 	for sc.Scan() {
 		//L("TEXT: %q", sc.Text())
@@ -74,7 +82,7 @@ func Repl(env Env, r io.Reader) ([]X, Env) {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
 			errStr := fmt.Sprintf("%v", err)
-			results = append(results, NIL.Snoc(&Str{S: errStr}).Snoc(Intern("*ERROR*")))
+			results = append(results, Snoc(Snoc(NIL, errStr), Intern("*ERROR*")))
 		} else {
 			fmt.Fprintf(os.Stderr, "---->   %v\n", result)
 			env = newenv
