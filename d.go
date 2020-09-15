@@ -8,23 +8,28 @@ import (
 )
 
 var Globals = make(map[string]Any)
-
 var InternTable = make(map[string]*Sym)
 
-// var NIL *Pair // with a nil value.
-var NIL = &Pair{}
-var FN = Intern("fn")
-var TRUE = Intern("true")
-var DEF = Intern("def")
-var DEFUN = Intern("defun")
+var (
+	// Traditionally NIL would be a special *Sym,
+	// but in this Lisp it will be a special *Pair.
+	// It is not Interned.  The parser will have to know
+	// about this special name.  AtomP(NIL) is still true,
+	// although it cannot be used as an environment key.
+	NIL   = &Pair{}         // Address matters; contents do not.
+	FN    = Intern("fn")    // In other Lisps, this is lambda.
+	TRUE  = Intern("true")  // In other Lisps, this is T or *T*.
+	DEF   = Intern("def")   // Special to the REPL; it modifies the env.
+	DEFUN = Intern("defun") // Special to the REPL; it modifies the env.
+)
 
 func Intern(s string) *Sym {
 	if z, ok := InternTable[s]; ok {
 		return z
 	}
-	z := &Sym{S: s}
-	InternTable[s] = z
-	return z
+	z2 := &Sym{S: s}
+	InternTable[s] = z2
+	return z2
 }
 
 // Env
@@ -39,6 +44,8 @@ func (env Env) Get(k *Sym) (Any, bool) {
 	//log.Printf("GET >>> %#v, ok=%v", z, ok)
 	return z, ok
 }
+
+// String methods.
 
 func (env Env) String() string {
 	return fmt.Sprintf("Env{%v}", Stringify(env.Chain))
@@ -64,7 +71,15 @@ func (o *Sym) String() string {
 	return o.S
 }
 
-// XBase
+func (o *Prim) String() string {
+	return fmt.Sprintf("Prim(%q)", o.Name)
+}
+
+func (o *Special) String() string {
+	return fmt.Sprintf("Special(%q)", o.Name)
+}
+
+// Global Lispy Funcs
 
 func NullP(o Any) bool {
 	switch t := o.(type) {
@@ -179,7 +194,7 @@ func Throw(o Any, format string, args ...interface{}) Any {
 	v = append(v, o)
 	v = append(v, o)
 	v = append(v, args...)
-	log.Panicf("Exception on (%T)%v: "+format, v...)
+	log.Panicf("Exception on (%T) %v: "+format, v...)
 	return NIL
 }
 
@@ -211,6 +226,7 @@ func Eval(o Any, env Env) Any {
 	//log.Printf("EVAL >>> %v", z)
 	return z
 }
+
 func Apply(o Any, args []Any, env Env) Any {
 	//log.Printf("APPLY <<< %v << %v ; %v", o, args, env)
 	var z Any
@@ -264,15 +280,7 @@ func ApplyPrim(o *Prim, args []Any, env Env) Any { // args are unevaluted.
 	return o.F(evalledArgs, env)
 }
 
-func (o *Prim) String() string {
-	return fmt.Sprintf("Prim(%q)", o.Name)
-}
-
 func ApplySpecial(o *Special, args []Any, env Env) Any { // args are unevaluted.
 	z := o.F(args, env)
 	return z
-}
-
-func (o *Special) String() string {
-	return fmt.Sprintf("Special(%q)", o.Name)
 }
