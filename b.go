@@ -11,6 +11,12 @@ import (
 	. "github.com/strickyak/yak"
 )
 
+var serial int64
+
+func Serial() int64 {
+	return atomic.AddInt64(&serial, 1)
+}
+
 var BuiltinSpecials = map[string]func([]Any, Env) Any{
 	"quote": func(args []Any, env Env) Any {
 		MustLen(args, 1)
@@ -100,8 +106,6 @@ func LispyBool(b bool) Any {
 	}
 }
 
-var serial int64
-
 type ContinuationUsed string // for exiting thread.
 
 func CallCC(args []Any, env Env) Any {
@@ -116,7 +120,7 @@ func CallCC(args []Any, env Env) Any {
 				}
 			}
 		}()
-		name := fmt.Sprintf("continuation_%d", atomic.AddInt64(&serial, 1))
+		name := fmt.Sprintf("continuation_%d", Serial())
 		continuation := &Prim{
 			Name: name,
 			F: func(args []Any, env Env) Any {
