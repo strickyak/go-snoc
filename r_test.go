@@ -78,6 +78,15 @@ func TestPrograms(t *testing.T) {
 			111 222 333
 			(my-sum (my-descending 7))
 		`, "28"},
+
+		{`(let x (quote (+ 20 3))
+		       (eval x))
+		`, "23"},
+
+		{`(let x (fn (aaa bbb) (- aaa bbb))
+		       y (list 100 4)
+		       (apply x y))
+		`, "96"},
 	}
 
 	for j, sc := range scenarios {

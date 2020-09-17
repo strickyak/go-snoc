@@ -145,6 +145,14 @@ var BuiltinPrims = map[string]func([]Any, Env) Any{
 		MustLen(args, 1)
 		return Head(Head(Tail(Tail(Tail(args[0])))))
 	},
+	"eval": func(args []Any, env Env) Any {
+		MustLen(args, 1)
+		return Eval(args[0], env)
+	},
+	"apply": func(args []Any, env Env) Any {
+		MustLen(args, 2)
+		return Apply(args[0], ListToVec(args[1]), env)
+	},
 	"snoc": func(args []Any, env Env) Any {
 		MustLen(args, 2)
 		p, ok := args[0].(*Pair)

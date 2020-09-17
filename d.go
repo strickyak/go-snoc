@@ -1,6 +1,7 @@
 package snoc
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"runtime/debug"
@@ -9,6 +10,13 @@ import (
 
 var Globals = make(map[string]Any)
 var InternTable = make(map[string]*Sym)
+var FlagVerbose = flag.Bool("v", false, "verbosity")
+
+func Log(format string, args ...interface{}) {
+	if *FlagVerbose {
+		log.Printf(format, args...)
+	}
+}
 
 var (
 	// Traditionally NIL would be a special *Sym,
@@ -199,7 +207,7 @@ func Throw(o Any, format string, args ...interface{}) Any {
 }
 
 func Eval(o Any, env Env) Any {
-	//log.Printf("EVAL <<< %v ; %v", o, env)
+	Log("EVAL <<< %v ; %v", o, env)
 	z := o
 	switch t := o.(type) {
 	case nil:
@@ -218,17 +226,19 @@ func Eval(o Any, env Env) Any {
 		}
 	case *Pair:
 		if o == NIL {
-			z = NIL
+			z = NIL // NIL is self-evaluating.
+		} else if t.H == FN {
+			z = o // Lambda exprs are self-evaluating.
 		} else {
 			z = Apply(Eval(t.H, env), ListToVec(t.T), env)
 		}
 	}
-	//log.Printf("EVAL >>> %v", z)
+	Log("EVAL >>> %v", z)
 	return z
 }
 
 func Apply(o Any, args []Any, env Env) Any {
-	//log.Printf("APPLY <<< %v << %v ; %v", o, args, env)
+	Log("APPLY <<< %v << %v ; %v", o, args, env)
 	var z Any
 	switch t := o.(type) {
 	case nil:
@@ -244,7 +254,7 @@ func Apply(o Any, args []Any, env Env) Any {
 	default:
 		z = Throw(o, "cannot Apply")
 	}
-	//log.Printf("APPLY >>> %v", z)
+	Log("APPLY >>> %v", z)
 	return z
 }
 
