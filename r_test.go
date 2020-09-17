@@ -87,6 +87,22 @@ func TestPrograms(t *testing.T) {
 		       y (list 100 4)
 		       (apply x y))
 		`, "96"},
+
+		{`(defun demo(xx yy)
+		    (call/cc (fn (return)
+					 (let n 13
+					      p (return (* xx yy))
+							  (+ xx yy)))))
+			(demo 100 100)
+		`, "10000"},
+
+		{`(defun demo(xx yy)
+		    (call/cc (fn (return)
+					 (let n 13
+					      p (quote (return (* xx yy)))
+							  (+ xx yy)))))
+			(demo 100 100)
+		`, "200"},
 	}
 
 	for j, sc := range scenarios {

@@ -3,7 +3,10 @@
 package snoc
 
 import (
+	"fmt"
+	"log"
 	"math"
+	"sync/atomic"
 
 	. "github.com/strickyak/yak"
 )
@@ -89,7 +92,7 @@ var BuiltinFloatingRelOps = map[string]func(float64, float64) bool{
 	">=": func(a, b float64) bool { return a >= b },
 }
 
-func TrueNil(b bool) Any {
+func LispyBool(b bool) Any {
 	if b {
 		return TRUE
 	} else {
@@ -97,7 +100,40 @@ func TrueNil(b bool) Any {
 	}
 }
 
+var serial int64
+
+type ContinuationUsed string // for exiting thread.
+
+func CallCC(args []Any, env Env) Any {
+	MustLen(args, 1)
+	ch := make(chan Any)
+	go func() {
+		defer func() {
+			r := recover()
+			if r != nil {
+				if _, ok := r.(ContinuationUsed); !ok {
+					log.Fatalf("ERROR in thread: %v", r)
+				}
+			}
+		}()
+		name := fmt.Sprintf("continuation_%d", atomic.AddInt64(&serial, 1))
+		continuation := &Prim{
+			Name: name,
+			F: func(args []Any, env Env) Any {
+				MustLen(args, 1)
+				ch <- args[0]
+				close(ch)
+				panic(ContinuationUsed(name))
+			},
+		}
+		ch <- Apply(args[0], []Any{continuation}, env)
+		close(ch)
+	}()
+	return <-ch
+}
+
 var BuiltinPrims = map[string]func([]Any, Env) Any{
+	"call/cc": CallCC,
 	"list": func(args []Any, env Env) Any {
 		z := NIL
 		for i := len(args) - 1; i >= 0; i-- {
@@ -107,15 +143,15 @@ var BuiltinPrims = map[string]func([]Any, Env) Any{
 	},
 	"null?": func(args []Any, env Env) Any {
 		MustLen(args, 1)
-		return TrueNil(NullP(args[0]))
+		return LispyBool(NullP(args[0]))
 	},
 	"atom?": func(args []Any, env Env) Any {
 		MustLen(args, 1)
-		return TrueNil(AtomP(args[0]))
+		return LispyBool(AtomP(args[0]))
 	},
 	"eq": func(args []Any, env Env) Any {
 		MustLen(args, 2)
-		return TrueNil(Eq(args[0], args[1]))
+		return LispyBool(Eq(args[0], args[1]))
 	},
 	"head": func(args []Any, env Env) Any {
 		MustLen(args, 1)
