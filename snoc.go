@@ -13,7 +13,7 @@ import (
 func main() {
 	flag.Parse()
 
-	results, _ := Repl(NewEnv(), os.Stdin)
+	results := Repl(NewTerp(), os.Stdin)
 	for i, result := range results {
 		L("==> result[%d] = %v", i, result)
 	}
