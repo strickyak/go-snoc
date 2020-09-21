@@ -2,7 +2,7 @@
 Simple LISP written in Go.
 
 Currently uses a simple environment list for local variables,
-no fancy lexical bindng.
+no fancy lexical bindng.   NO I'M CHANGING THAT....
 
 ## work in progress...
 
