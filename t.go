@@ -2,8 +2,40 @@ package snoc
 
 type Any interface{}
 
+type Terp struct {
+	Globals map[*Sym]Any
+}
+
 type Env struct {
-	Chain *Pair
+	Proto *ProtoFunc
+	Up    *Env
+	Slots []Any
+	Terp  *Terp
+}
+
+type ProtoFunc struct {
+	Outer  *ProtoFunc
+	Params []*Sym
+	Values []Any // Only for Let
+	Body   Any
+	Name   string
+	IsLet  bool
+}
+
+type Func struct {
+	Outer  *Env
+	Params []*Sym
+	Values []Any // Only for Let
+	Body   Any
+	Name   string
+	IsLet  bool
+	Proto  *ProtoFunc
+}
+
+type Var struct {
+	Proto *ProtoFunc
+	Slot  int
+	Sym   *Sym
 }
 
 type Sym struct {
@@ -17,10 +49,10 @@ type Pair struct {
 
 type Prim struct {
 	Name string
-	F    func(args []Any, env Env) Any // args are evaluated.
+	F    func(args []Any, env *Env) Any // args are evaluated.
 }
 
 type Special struct {
 	Name string
-	F    func(args []Any, env Env) Any // args are unevaluated.
+	F    func(args []Any, env *Env) Any // args are unevaluated.
 }

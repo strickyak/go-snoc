@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-var Globals = make(map[string]Any)
+//var Globals = make(map[string]Any)
 var InternTable = make(map[string]*Sym)
 var FlagVerbose = flag.Bool("v", false, "verbosity")
 
@@ -40,23 +40,41 @@ func Intern(s string) *Sym {
 	return z2
 }
 
-// Env
-
-func (env Env) SnocSnoc(x Any, s *Sym) Env {
-	return Env{Snoc(Snoc(env.Chain, x), s)}
-}
-
-func (env Env) Get(k *Sym) (Any, bool) {
-	//log.Printf("GET <<< %q", k.S)
-	z, ok := Get(env.Chain, k)
-	//log.Printf("GET >>> %#v, ok=%v", z, ok)
-	return z, ok
-}
-
 // String methods.
 
-func (env Env) String() string {
-	return fmt.Sprintf("Env{%v}", Stringify(env.Chain))
+func (o *ProtoFunc) String() string {
+	if o == nil {
+		return "nil"
+	}
+	if o == o.Outer {
+		return "loop"
+	}
+	return fmt.Sprintf("ProtoFunc{let=%v,name=%q,params=%v,values=%v}", o.IsLet, o.Name, o.Params, o.Values)
+}
+
+func (o *Func) String() string {
+	if o == nil {
+		return "nil"
+	}
+	return fmt.Sprintf("Func{let=%v,name=%q,params=%v,values=%v,body=<<<%v>>>,outer=%v}", o.IsLet, o.Name, o.Params, o.Values, o.Body, o.Outer)
+}
+
+func (o *Var) String() string {
+	return fmt.Sprintf("Var{%q[%d]%v%v}", o.Sym.S, o.Slot, o.Proto.Name, o.Proto.Params)
+}
+
+func (env *Env) String() string {
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "Env")
+	for p := env; p != nil; p = p.Up {
+		fmt.Fprintf(&buf, "{%q", p.Proto.Name)
+		for i, e := range p.Slots {
+			fmt.Fprintf(&buf, " ")
+			fmt.Fprintf(&buf, "[%d]:%v:%T", i, p.Proto.Params[i], e)
+		}
+		fmt.Fprintf(&buf, "}")
+	}
+	return buf.String()
 }
 
 func (o *Pair) String() string {
@@ -206,47 +224,97 @@ func Throw(o Any, format string, args ...interface{}) Any {
 	return NIL
 }
 
-func Eval(o Any, env Env) Any {
+func Eval(o Any, env *Env) Any {
 	Log("EVAL <<< %v ; %v", o, env)
 	z := o
+SWITCH:
 	switch t := o.(type) {
 	case nil:
-		z = o
+		panic("cannot Eval golang nil")
+	case *ProtoFunc:
+		z = &Func{
+			Proto:  t,
+			Outer:  env,      // TODO WRONG?
+			Params: t.Params, // omit
+			Values: t.Values, // omit
+			Body:   t.Body,   // omit
+			Name:   t.Name,   // omit
+			IsLet:  t.IsLet,  // omit
+		}
+	case *Var:
+		{
+			for p := env; p != nil; p = p.Up {
+				if p.Proto == t.Proto {
+					z = p.Slots[t.Slot]
+					break SWITCH
+				}
+			}
+			Throw(o, "cannot Eval Var: %v", t)
+		}
 	case *Sym:
-		z2, zok := env.Get(t)
-		if zok {
-			z = z2
-		} else {
-			g, gok := Globals[t.S]
-			// log.Printf("Globals %q --> (%T) %v, ok=%v", t.S, g, g, gok)
-			if !gok {
-				Throw(o, "cannot Eval")
+		{
+			g, ok := env.Terp.Globals[t]
+			// log.Printf("Globals %q --> (%T) %v, ok=%v", t.S, g, g, ok)
+			if !ok {
+				Throw(o, "cannot Eval symbol %q with globals %v", t.S, env.Terp.Globals)
 			}
 			z = g
 		}
 	case *Pair:
-		if o == NIL {
+		switch {
+		case o == NIL:
 			z = NIL // NIL is self-evaluating.
-		} else if t.H == FN {
-			z = o // Lambda exprs are self-evaluating.
-		} else {
+		case t.H == FN:
+			if (t.T == NIL) ||
+				(t.T.T == NIL) ||
+				(t.T.T.T != NIL) {
+				Throw(t, "FN must have 3 elements in the list")
+			}
+			z = EvalLambda(ListToVec(t.T.H), t.T.T.H, env)
+		default:
 			z = Apply(Eval(t.H, env), ListToVec(t.T), env)
 		}
 	}
+
+	// Eval never returns a *ProtoFunc; convert it into a Func.
+	// TODO Probably this should not be called "Eval".
+	if pf, ok := z.(*ProtoFunc); ok {
+		z = Eval(pf, env)
+	}
+
 	Log("EVAL >>> %v", z)
 	return z
 }
 
-func Apply(o Any, args []Any, env Env) Any {
+func EvalLambda(params []Any, body Any, env *Env) Any {
+	log.Fatalf("STOP EvalLambda")
+	return nil
+	/*
+		pp := make([]*Sym, len(params))
+		for i, e := range params {
+			if p, ok := e.(*Sym); ok {
+				pp[i] = p
+			} else {
+				Throw(e, "Fn params must be *Sym")
+			}
+		}
+		return &Func{
+			Outer:  env.Owner.Outer,
+			Params: pp,
+		}
+	*/
+}
+
+func Apply(o Any, args []Any, env *Env) Any {
 	Log("APPLY <<< %v << %v ; %v", o, args, env)
 	var z Any
 	switch t := o.(type) {
 	case nil:
-		z = Throw(t, "cannot Apply list where first is nil")
+		panic("cannot Apply on golang nil")
 	case *Sym:
-		z = Throw(t, "cannot Apply list where first is *Sym")
-	case *Pair:
-		z = ApplyPair(t, args, env)
+		z = Throw(t, "cannot Apply on a symbol")
+	case *Func:
+		z = ApplyFunc(t, args, env)
 	case *Prim:
 		z = ApplyPrim(t, args, env)
 	case *Special:
@@ -258,31 +326,53 @@ func Apply(o Any, args []Any, env Env) Any {
 	return z
 }
 
-func ApplyPair(o *Pair, args []Any, env Env) Any {
-	if o == NIL {
-		Throw(o, "cannot Apply if list is nil")
+func ApplyFunc(o *Func, args []Any, env *Env) Any {
+	Log("ApplyFunc << %v << %v << %v", o, args, env)
+	if o.IsLet {
+		if args != nil {
+			Throw(o, "apply: got %d args but wanted none because it has Let Values")
+		}
+	} else {
+		if len(args) != len(o.Params) {
+			Throw(o, "apply: got %d args but wanted %d", len(args), len(o.Params))
+		}
 	}
 
-	if !Eq(o.H, FN) {
-		Throw(o, "cannot Apply if first is not FN")
+	slots := make([]Any, len(o.Params))
+	for i, v := range args { // For the FN case.
+		slots[i] = Eval(v, env)
 	}
 
-	vars := ListToVec(o.T.H)
-	if len(vars) != len(args) {
-		Throw(o, "apply: got %d args but wanted %d", len(args), len(vars))
+	env2 := &Env{
+		Up:    env, // dynamic or scoped?
+		Proto: o.Proto,
+		Slots: slots,
+		Terp:  env.Terp,
 	}
 
-	vals := make([]Any, len(vars))
-	for i, v := range args {
-		vals[i] = Eval(v, env)
+	var z Any
+	if o.IsLet {
+		lenVal := len(o.Values)
+		Log("Slots len=%d", lenVal)
+		for i, v := range o.Values { // For the LET case.
+			Log("Slots[%d/%d] << %v", i, lenVal, v)
+
+			tmp := Eval(v, env2)
+			slots[i] = Apply(tmp, nil, env2)
+
+			Log("Slots[%d/%d] >> %v", i, lenVal, slots[i])
+		}
+		Log("Body == %v; %v", o.Body, env2)
+		tmp := Eval(o.Body, env2)
+		z = Apply(tmp, nil, env2)
+	} else {
+		z = Eval(o.Body, env2)
 	}
-	for i, _ := range vars {
-		env = env.SnocSnoc(vals[i], vars[i].(*Sym))
-	}
-	return Eval(o.T.T.H, env)
+	Log("ApplyFunc >> %v", z)
+	return z
 }
 
-func ApplyPrim(o *Prim, args []Any, env Env) Any { // args are unevaluted.
+func ApplyPrim(o *Prim, args []Any, env *Env) Any { // args are unevaluted.
 	evalledArgs := make([]Any, len(args))
 	for i, a := range args {
 		evalledArgs[i] = Eval(a, env)
@@ -290,7 +380,7 @@ func ApplyPrim(o *Prim, args []Any, env Env) Any { // args are unevaluted.
 	return o.F(evalledArgs, env)
 }
 
-func ApplySpecial(o *Special, args []Any, env Env) Any { // args are unevaluted.
+func ApplySpecial(o *Special, args []Any, env *Env) Any { // args are unevaluted.
 	z := o.F(args, env)
 	return z
 }

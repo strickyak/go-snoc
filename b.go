@@ -3,9 +3,9 @@
 package snoc
 
 import (
-	"fmt"
 	"log"
 	"math"
+	"strconv"
 	"sync/atomic"
 
 	. "github.com/strickyak/yak"
@@ -13,16 +13,16 @@ import (
 
 var serial int64
 
-func Serial() int64 {
-	return atomic.AddInt64(&serial, 1)
+func Serial(prefix string) string {
+	return prefix + strconv.FormatInt(atomic.AddInt64(&serial, 1), 10)
 }
 
-var BuiltinSpecials = map[string]func([]Any, Env) Any{
-	"quote": func(args []Any, env Env) Any {
+var BuiltinSpecials = map[string]func([]Any, *Env) Any{
+	"quote": func(args []Any, env *Env) Any {
 		MustLen(args, 1)
 		return args[0]
 	},
-	"and": func(args []Any, env Env) Any {
+	"and": func(args []Any, env *Env) Any {
 		z := Any(TRUE)
 		for _, a := range args {
 			x := Eval(a, env)
@@ -33,7 +33,7 @@ var BuiltinSpecials = map[string]func([]Any, Env) Any{
 		}
 		return z
 	},
-	"or": func(args []Any, env Env) Any {
+	"or": func(args []Any, env *Env) Any {
 		for _, a := range args {
 			x := Eval(a, env)
 			if Bool(x) {
@@ -42,7 +42,7 @@ var BuiltinSpecials = map[string]func([]Any, Env) Any{
 		}
 		return NIL
 	},
-	"all": func(args []Any, env Env) Any {
+	"all": func(args []Any, env *Env) Any {
 		for _, a := range args {
 			if NullP(Eval(a, env)) {
 				return NIL
@@ -50,7 +50,7 @@ var BuiltinSpecials = map[string]func([]Any, Env) Any{
 		}
 		return TRUE
 	},
-	"any": func(args []Any, env Env) Any {
+	"any": func(args []Any, env *Env) Any {
 		for _, a := range args {
 			if Bool(Eval(a, env)) {
 				return TRUE
@@ -58,7 +58,7 @@ var BuiltinSpecials = map[string]func([]Any, Env) Any{
 		}
 		return NIL
 	},
-	"if": func(args []Any, env Env) Any {
+	"if": func(args []Any, env *Env) Any {
 		for len(args) >= 2 {
 			pred := Eval(args[0], env)
 			if Bool(pred) {
@@ -69,16 +69,18 @@ var BuiltinSpecials = map[string]func([]Any, Env) Any{
 		MustEq(len(args), 1)
 		return Eval(args[0], env)
 	},
-	"let": func(args []Any, env Env) Any {
-		for len(args) >= 2 {
-			sym, ok := args[0].(*Sym)
-			Must(ok)
-			env = env.SnocSnoc(Eval(args[1], env), sym)
-			args = args[2:]
-		}
-		MustEq(len(args), 1)
-		return Eval(args[0], env)
-	},
+	/*
+		"let": func(args []Any, env *Env) Any {
+			for len(args) >= 2 {
+				sym, ok := args[0].(*Sym)
+				Must(ok)
+				env = env.SnocSnoc(Eval(args[1], env), sym)
+				args = args[2:]
+			}
+			MustEq(len(args), 1)
+			return Eval(args[0], env)
+		},
+	*/
 }
 
 var BuiltinFloatingBinaryOps = map[string]func(float64, float64) float64{
@@ -108,7 +110,7 @@ func LispyBool(b bool) Any {
 
 type ContinuationUsed string // for exiting thread.
 
-func CallCC(args []Any, env Env) Any {
+func CallCC(args []Any, env *Env) Any {
 	MustLen(args, 1)
 	ch := make(chan Any)
 	go func() {
@@ -120,10 +122,10 @@ func CallCC(args []Any, env Env) Any {
 				}
 			}
 		}()
-		name := fmt.Sprintf("continuation_%d", Serial())
+		name := Serial("continuation_")
 		continuation := &Prim{
 			Name: name,
-			F: func(args []Any, env Env) Any {
+			F: func(args []Any, env *Env) Any {
 				MustLen(args, 1)
 				ch <- args[0]
 				close(ch)
@@ -136,64 +138,64 @@ func CallCC(args []Any, env Env) Any {
 	return <-ch
 }
 
-var BuiltinPrims = map[string]func([]Any, Env) Any{
+var BuiltinPrims = map[string]func([]Any, *Env) Any{
 	"call/cc": CallCC,
-	"list": func(args []Any, env Env) Any {
+	"list": func(args []Any, env *Env) Any {
 		z := NIL
 		for i := len(args) - 1; i >= 0; i-- {
 			z = Snoc(z, args[i])
 		}
 		return z
 	},
-	"null?": func(args []Any, env Env) Any {
+	"null?": func(args []Any, env *Env) Any {
 		MustLen(args, 1)
 		return LispyBool(NullP(args[0]))
 	},
-	"atom?": func(args []Any, env Env) Any {
+	"atom?": func(args []Any, env *Env) Any {
 		MustLen(args, 1)
 		return LispyBool(AtomP(args[0]))
 	},
-	"eq": func(args []Any, env Env) Any {
+	"eq": func(args []Any, env *Env) Any {
 		MustLen(args, 2)
 		return LispyBool(Eq(args[0], args[1]))
 	},
-	"head": func(args []Any, env Env) Any {
+	"head": func(args []Any, env *Env) Any {
 		MustLen(args, 1)
 		return Head(args[0])
 	},
-	"tail": func(args []Any, env Env) Any {
+	"tail": func(args []Any, env *Env) Any {
 		MustLen(args, 1)
 		return Tail(args[0])
 	},
-	"1st": func(args []Any, env Env) Any {
+	"1st": func(args []Any, env *Env) Any {
 		MustLen(args, 1)
 		return Head(args[0])
 	},
-	"2nd": func(args []Any, env Env) Any {
+	"2nd": func(args []Any, env *Env) Any {
 		MustLen(args, 1)
 		return Head(Tail(args[0]))
 	},
-	"3rd": func(args []Any, env Env) Any {
+	"3rd": func(args []Any, env *Env) Any {
 		MustLen(args, 1)
 		return Head(Head(Tail(args[0])))
 	},
-	"4th": func(args []Any, env Env) Any {
+	"4th": func(args []Any, env *Env) Any {
 		MustLen(args, 1)
 		return Head(Head(Tail(Tail(args[0]))))
 	},
-	"5th": func(args []Any, env Env) Any {
+	"5th": func(args []Any, env *Env) Any {
 		MustLen(args, 1)
 		return Head(Head(Tail(Tail(Tail(args[0])))))
 	},
-	"eval": func(args []Any, env Env) Any {
+	"eval": func(args []Any, env *Env) Any {
 		MustLen(args, 1)
 		return Eval(args[0], env)
 	},
-	"apply": func(args []Any, env Env) Any {
+	"apply": func(args []Any, env *Env) Any {
 		MustLen(args, 2)
 		return Apply(args[0], ListToVec(args[1]), env)
 	},
-	"snoc": func(args []Any, env Env) Any {
+	"snoc": func(args []Any, env *Env) Any {
 		MustLen(args, 2)
 		p, ok := args[0].(*Pair)
 		if !ok {
@@ -201,7 +203,7 @@ var BuiltinPrims = map[string]func([]Any, Env) Any{
 		}
 		return Snoc(p, args[1])
 	},
-	"cons": func(args []Any, env Env) Any {
+	"cons": func(args []Any, env *Env) Any {
 		MustLen(args, 2)
 		p, ok := args[1].(*Pair)
 		if !ok {
@@ -209,14 +211,14 @@ var BuiltinPrims = map[string]func([]Any, Env) Any{
 		}
 		return Snoc(p, args[0])
 	},
-	"sum": func(args []Any, env Env) Any {
+	"sum": func(args []Any, env *Env) Any {
 		sum := 0.0
 		for _, a := range args {
 			sum += ToFloat(a)
 		}
 		return sum
 	},
-	"product": func(args []Any, env Env) Any {
+	"product": func(args []Any, env *Env) Any {
 		product := 1.0
 		for _, a := range args {
 			product *= ToFloat(a)
@@ -225,23 +227,25 @@ var BuiltinPrims = map[string]func([]Any, Env) Any{
 	},
 }
 
-func init() {
+func NewTerp() *Terp {
+	globals := make(map[*Sym]Any)
+
 	for k, fn := range BuiltinSpecials {
-		Globals[k] = &Special{Name: k, F: fn}
+		globals[Intern(k)] = &Special{Name: k, F: fn}
 	}
 	for k, fn := range BuiltinPrims {
-		Globals[k] = &Prim{Name: k, F: fn}
+		globals[Intern(k)] = &Prim{Name: k, F: fn}
 	}
 	for k, fn := range BuiltinFloatingBinaryOps {
 		k_, fn_ := k, fn // Capture an inside-loop copy.
-		Globals[k_] = &Prim{Name: k_, F: func(args []Any, env Env) Any {
+		globals[Intern(k_)] = &Prim{Name: k_, F: func(args []Any, env *Env) Any {
 			MustEq(len(args), 2)
 			return fn_(args[0].(float64), args[1].(float64))
 		}}
 	}
 	for k, fn := range BuiltinFloatingRelOps {
 		k_, fn_ := k, fn // Capture an inside-loop copy.
-		Globals[k_] = &Prim{Name: k_, F: func(args []Any, env Env) Any {
+		globals[Intern(k_)] = &Prim{Name: k_, F: func(args []Any, env *Env) Any {
 			MustEq(len(args), 2)
 			a := args[0].(float64)
 			b := args[1].(float64)
@@ -251,13 +255,13 @@ func init() {
 			return NIL
 		}}
 	}
-	Globals["nil"] = NIL
-	Globals["fn"] = FN
-	Globals["def"] = DEF
-	Globals["defun"] = DEFUN
-	Globals["true"] = TRUE
-}
+	globals[Intern("nil")] = NIL
+	globals[Intern("fn")] = FN
+	globals[Intern("def")] = DEF
+	globals[Intern("defun")] = DEFUN
+	globals[Intern("true")] = TRUE
 
-func NewEnv() Env {
-	return Env{NIL}
+	return &Terp{
+		Globals: globals,
+	}
 }

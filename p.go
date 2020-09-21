@@ -35,6 +35,36 @@ func Lex(text, filename string) (z []Tok) {
 	return
 }
 
+func ListLen(a Any) int {
+	b, ok := a.(*Pair)
+	if !ok {
+		Throw(a, "ListLen expected *Pair")
+	}
+
+	i := 0
+	for p := b; p != NIL; p = p.T {
+		i++
+	}
+	return i
+}
+
+func ListToVecOfSym(a Any) []*Sym {
+	b, ok := a.(*Pair)
+	if !ok {
+		Throw(a, "ListToVec expected *Pair")
+	}
+
+	var z []*Sym
+	for p := b; p != NIL; p = p.T {
+		sym, ok := p.H.(*Sym)
+		if !ok {
+			log.Panicf("ListToVecOfSym expected *Sym but got %v", p.H)
+		}
+		z = append(z, sym)
+	}
+	return z
+}
+
 func ListToVec(a Any) []Any {
 	b, ok := a.(*Pair)
 	if !ok {
@@ -56,6 +86,7 @@ func VecToList(a []Any) Any {
 }
 
 func ParseExprs(toks []Tok) (string, []Tok, []Any) {
+	// me := Serial("###")
 	var z []Any
 	last := ""
 LOOP:
